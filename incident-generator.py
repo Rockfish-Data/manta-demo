@@ -4,7 +4,7 @@ import argparse
 import json
 import os
 import sys
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import requests
 import yaml
@@ -104,6 +104,104 @@ def load_incidents_config(config_file: str) -> List[Dict]:
         sys.exit(f"Error loading incidents configuration file: {e}")
 
 
+def generate_prompts(manta_url: str, headers: Dict[str, str], dataset_id: str,
+                    incidents: List[Dict]) -> List[Tuple[str, Dict]]:
+    """Generate incident datasets and prompts for each incident configuration.
+
+    Args:
+        manta_url: Base URL for Manta API
+        headers: API headers for authentication
+        dataset_id: Source dataset ID
+        incidents: List of incident configurations
+
+    Returns:
+        List of tuples containing (incident_dataset_id, incident_config)
+    """
+    incident_results = []
+
+    # Process each incident
+    for incident in incidents:
+        incident_type = incident["type"]
+        config = incident["configuration"]
+
+        print(f"\nProcessing incident type: {incident_type}")
+
+        # Create incident dataset
+        response = create_incident_data(
+            manta_url,
+            headers,
+            dataset_id,
+            incident_type,
+            config
+        )
+
+        if response:
+            incident_dataset_id = response['dataset_id']
+            # Store both the dataset ID and the full incident configuration
+            incident_results.append((incident_dataset_id, incident))
+            print(f"Created incident dataset: {incident_dataset_id}")
+
+            # Generate prompts for the incident dataset
+            prompt_response = create_prompts(
+                manta_url,
+                headers,
+                incident_dataset_id
+            )
+
+            if prompt_response:
+                print("Generated prompts (YAML)")
+
+    return incident_results
+
+
+def retrieve_prompts(manta_url: str, headers: Dict[str, str], dataset_id: str) -> Optional[Dict]:
+    """Retrieve prompts for a dataset using Manta GET API.
+
+    Args:
+        manta_url: Base URL for Manta API
+        headers: API headers for authentication
+        dataset_id: Dataset ID to retrieve prompts for
+
+    Returns:
+        Dictionary containing prompts data or None if request fails
+    """
+    url = f"{manta_url}/prompts"
+    params = {"dataset_id": dataset_id}
+
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Error retrieving prompts: {e}")
+        if hasattr(e, "response") and e.response is not None:
+            print(f"Response: {e.response.text}")
+        return None
+
+
+def format_output(dataset_id: str, incident_config: Dict, prompts: Dict) -> str:
+    """Format incident dataset output with configuration and prompts in YAML.
+
+    Args:
+        dataset_id: The incident dataset ID
+        incident_config: The incident configuration dictionary
+        prompts: The prompts dictionary
+
+    Returns:
+        Formatted string with dataset ID, incident config as comments, and prompts
+    """
+    output = f"# Incident dataset: {dataset_id}\n"
+    output += "# Incident configuration:\n"
+    incident_yaml = yaml.dump(incident_config, Dumper=_BlockStrDumper, sort_keys=False, default_flow_style=False)
+    for line in incident_yaml.split('\n'):
+        if line:
+            output += f"# {line}\n"
+    output += "\n"
+    prompts_yaml = yaml.dump(prompts, Dumper=_BlockStrDumper, sort_keys=False, default_flow_style=False)
+    output += prompts_yaml
+    return output
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate incident datasets and prompts")
     parser.add_argument("dataset_id", help="ID of the source dataset")
@@ -123,53 +221,48 @@ def main():
     
     # Load incidents configuration
     incidents = load_incidents_config(args.config_file)
-    
-    # Process each incident
-    for incident in incidents:
-        incident_type = incident["type"]
-        config = incident["configuration"]
-        
-        print(f"\nProcessing incident type: {incident_type}")
-        
-        # Create incident dataset
-        response = create_incident_data(
-            env["MANTA_API_URL"],
-            headers,
-            args.dataset_id,
-            incident_type,
-            config
-        )
-        
-        if response:
-            incident_dataset_id = response['dataset_id']
-            print(f"Created incident dataset: {incident_dataset_id}")
-            
-            # Generate prompts for the incident dataset
-            prompt_response = create_prompts(
+
+    # Generate incident datasets and prompts
+    print(f"Generating incident datasets and prompts based on dataset {args.dataset_id} and {args.config_file}")
+    incident_results = generate_prompts(
+        env["MANTA_API_URL"],
+        headers,
+        args.dataset_id,
+        incidents
+    )
+
+    # Demo: Retrieve prompts for each generated dataset using GET API
+    if incident_results:
+        print("\n" + "="*80)
+        print("Retrieving prompts via GET /prompts API")
+        print("="*80)
+
+        for dataset_id, incident_config in incident_results:
+            print(f"\nRetrieving prompts for dataset: {dataset_id}")
+            retrieved_prompts = retrieve_prompts(
                 env["MANTA_API_URL"],
                 headers,
-                incident_dataset_id
+                dataset_id
             )
-            
-            if prompt_response:
-                # Print prompts in YAML for cleaner multiline output (SQL, etc.).
-                # Use our custom dumper so multiline strings are emitted with the
-                # YAML block scalar (|) instead of inline escaped newlines.
-                print("Generated prompts (YAML):")
-                yaml_text = yaml.dump(prompt_response, Dumper=_BlockStrDumper, sort_keys=False, default_flow_style=False)
-                print(yaml_text)
 
-                # If an output path was provided, append the YAML to that file with a header.
+            if retrieved_prompts:
+                # Format the output with incident config and prompts
+                formatted_output = format_output(dataset_id, incident_config, retrieved_prompts)
+
+                # Print to console
+                print("Successfully retrieved prompts (YAML)")
+
+                # If an output path was provided, write to file
                 if args.out:
                     try:
                         with open(args.out, "a", encoding="utf-8") as fh:
-                            fh.write(f"# Incident dataset: {incident_dataset_id}\n")
-                            fh.write(yaml_text)
+                            fh.write(formatted_output)
                             fh.write("\n")
                         print(f"Wrote prompts to {args.out}")
                     except Exception as e:
                         print(f"Error writing prompts to {args.out}: {e}")
-
+                else:
+                    print(formatted_output)
 
 if __name__ == "__main__":
     main()
