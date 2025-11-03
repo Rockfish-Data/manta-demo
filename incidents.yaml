@@ -1,0 +1,45 @@
+- type: instantaneous-spike-data
+  configuration:
+    absolute_magnitude: 10000
+    impacted_measurement: "views"
+    impacted_metadata_predicate:
+      - column_name: "genre"
+        value: "Comedy"
+    timestamp_column: "timestamp"
+    timestamp: "2020-08-10 16:06:34"
+
+- type: sustained-magnitude-change-data
+  configuration:
+    delta_magnitude: 500
+    impacted_measurement: "likes"
+    impacted_metadata_predicate:
+      - column_name: "genre"
+        value: "Science"
+    timestamp_column: "timestamp"
+    start_timestamp: "2020-08-17 17:00:00"
+    end_timestamp: "2020-08-17 22:00:00"
+
+- type: data-outage-data
+  configuration:
+    absolute_magnitude: 20
+    impacted_measurement: "views"
+    impacted_metadata_predicate:
+      - column_name: "creatorEmail"
+        value: "david24@example.net"
+    timestamp_column: "timestamp"
+    start_timestamp: "2020-08-12 09:00:00"
+    end_timestamp: "2020-08-13 09:00:00"
+
+- type: value-ramp-data
+  configuration:
+    end_absolute_magnitude: 50
+    slope: 0.5
+    impacted_measurement: "comments"
+    impacted_metadata_predicate:
+      - column_name: "creatorEmail"
+        value: "david24@example.net"
+      - column_name: "genre"
+        value: "Technology"
+    timestamp_column: "timestamp"
+    start_timestamp: "2020-08-12 12:00:00"
+    end_timestamp: "2020-08-12 18:00:00"
