@@ -6,29 +6,46 @@ For quick start instructions, see [README.md](README.md).
 
 ## Overview
 
-The `incident-generator.py` script is a compact CLI wrapper (~175 lines) that:
-- Takes a source dataset ID and incident configurations
+The `incident-generator.py` script is a compact CLI wrapper (~320 lines) that operates in two modes:
+
+**Mode 1: Generate New Incidents**
+- Takes a source dataset ID and incident configurations from a YAML file
 - Calls Manta API endpoints to generate incident variants
 - Requests question/answer prompts for each generated incident dataset
 - Outputs prompts to stdout and optionally appends to a YAML file
 
+**Mode 2: Retrieve Existing Incidents**
+- Takes only a source dataset ID (no config file)
+- Calls Manta API to retrieve all previously generated incident datasets
+- Fetches prompts for each existing incident dataset
+- Outputs prompts to stdout and optionally appends to a YAML file
+
 ## Command-Line Usage
+
+### Generate New Incidents
 
 ```bash
 python incident-generator.py <dataset-id> <incidents-config.yaml> [--out OUTPUT.yaml]
 ```
 
+### Retrieve Existing Incidents
+
+```bash
+python incident-generator.py <dataset-id> [--out OUTPUT.yaml]
+```
+
 ### Parameters
 
 - **`<dataset-id>`** (required): ID of the source dataset already uploaded to Rockfish/Manta
-- **`<incidents-config.yaml>`** (required): YAML file listing incidents to generate
+- **`<incidents-config.yaml>`** (optional): YAML file listing incidents to generate. If omitted, the script retrieves existing incident datasets instead.
 - **`--out` / `-o`** (optional): File path to append generated prompts in YAML format
 
 ### Behavior
 
 - Prompts are **always** printed to stdout
 - When `--out` is specified, prompts are **also** appended to the file with headers
-- Each incident generates a new dataset ID and a set of Q&A prompts
+- **Mode 1 (with config file)**: Each incident generates a new dataset ID and a set of Q&A prompts
+- **Mode 2 (without config file)**: Retrieves all previously generated incident datasets and their prompts
 
 ### Example Output Format
 
@@ -112,6 +129,8 @@ incidents:
 
 ## API Integration Details
 
+### Mode 1: Generate New Incidents
+
 The script uses a two-step process for each incident:
 
 1. **Create Incident Dataset**
@@ -123,6 +142,21 @@ The script uses a two-step process for each incident:
    - POST to `{MANTA_API_URL}/prompts`
    - Body: `{"dataset_id": "<incident_dataset_id>"}`
    - Returns: Array of question/answer prompt objects
+
+### Mode 2: Retrieve Existing Incidents
+
+The script uses a two-step process:
+
+1. **Retrieve Incident Dataset IDs**
+   - POST to `{MANTA_API_URL}/incident-dataset-ids`
+   - Body: `{"dataset_id": "..."}`
+   - Returns: `{"dataset_ids": ["id1", "id2", ...]}`
+
+2. **Retrieve Prompts** (for each incident dataset)
+   - GET from `{MANTA_API_URL}/prompts?dataset_id=<incident_dataset_id>`
+   - Returns: Previously generated question/answer prompt objects
+
+### Authentication
 
 All API calls require three custom headers:
 - `X-API-Key`: Your Rockfish API key
@@ -157,6 +191,11 @@ Ensure the dataset ID you're using is:
 - Already uploaded to your Rockfish account
 - Accessible from your project/organization
 - Spelled correctly (dataset IDs are case-sensitive)
+
+When retrieving existing incidents, if you receive a "No incident datasets found" message, verify that:
+- You've previously generated incidents for this source dataset
+- The incident datasets haven't been deleted
+- You're using the correct source dataset ID
 
 ### Invalid Incident Configuration
 

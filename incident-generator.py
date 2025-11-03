@@ -154,6 +154,32 @@ def generate_prompts(manta_url: str, headers: Dict[str, str], dataset_id: str,
     return incident_results
 
 
+def retrieve_incident_dataset_ids(manta_url: str, headers: Dict[str, str], dataset_id: str) -> Optional[List[str]]:
+    """Retrieve list of incident dataset IDs for a given dataset using Manta API.
+
+    Args:
+        manta_url: Base URL for Manta API
+        headers: API headers for authentication
+        dataset_id: Source dataset ID to get incident datasets for
+
+    Returns:
+        List of incident dataset IDs or None if request fails
+    """
+    url = f"{manta_url}/incident-dataset-ids"
+    payload = {"dataset_id": dataset_id}
+
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        return data.get("dataset_ids", [])
+    except requests.exceptions.RequestException as e:
+        print(f"Error retrieving incident dataset IDs: {e}")
+        if hasattr(e, "response") and e.response is not None:
+            print(f"Response: {e.response.text}")
+        return None
+
+
 def retrieve_prompts(manta_url: str, headers: Dict[str, str], dataset_id: str) -> Optional[Dict]:
     """Retrieve prompts for a dataset using Manta GET API.
 
@@ -203,35 +229,59 @@ def format_output(dataset_id: str, incident_config: Dict, prompts: Dict) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate incident datasets and prompts")
+    parser = argparse.ArgumentParser(
+        description="Generate incident datasets and prompts, or retrieve existing incident datasets",
+        epilog="If config_file is not provided, the script will retrieve existing incident datasets."
+    )
     parser.add_argument("dataset_id", help="ID of the source dataset")
-    parser.add_argument("config_file", help="Path to incidents configuration YAML file")
+    parser.add_argument("config_file", nargs="?", default=None,
+                       help="Path to incidents configuration YAML file (optional). If not provided, retrieves existing incident datasets.")
     parser.add_argument("--out", "-o", dest="out", help="Path to output file to write prompts (YAML). If provided, prompts will be appended.")
     args = parser.parse_args()
 
     # Load environment variables
     env = load_environment()
-    
+
     # Set up API headers
     headers = get_headers(
         env["ROCKFISH_API_KEY"],
         env["ROCKFISH_PROJECT_ID"],
         env["ROCKFISH_ORGANIZATION_ID"]
     )
-    
-    # Load incidents configuration
-    incidents = load_incidents_config(args.config_file)
 
-    # Generate incident datasets and prompts
-    print(f"Generating incident datasets and prompts based on dataset {args.dataset_id} and {args.config_file}")
-    incident_results = generate_prompts(
-        env["MANTA_API_URL"],
-        headers,
-        args.dataset_id,
-        incidents
-    )
+    # Determine mode: generate new incidents or retrieve existing
+    if args.config_file:
+        # Mode 1: Generate new incident datasets from config file
+        incidents = load_incidents_config(args.config_file)
 
-    # Demo: Retrieve prompts for each generated dataset using GET API
+        print(f"Generating incident datasets and prompts based on dataset {args.dataset_id} and {args.config_file}")
+        incident_results = generate_prompts(
+            env["MANTA_API_URL"],
+            headers,
+            args.dataset_id,
+            incidents
+        )
+    else:
+        # Mode 2: Retrieve existing incident datasets
+        print(f"Retrieving existing incident datasets for source dataset {args.dataset_id}")
+        incident_dataset_ids = retrieve_incident_dataset_ids(
+            env["MANTA_API_URL"],
+            headers,
+            args.dataset_id
+        )
+
+        if incident_dataset_ids is None:
+            sys.exit("Failed to retrieve incident dataset IDs")
+
+        if not incident_dataset_ids:
+            print("No incident datasets found for this source dataset")
+            return
+
+        print(f"Found {len(incident_dataset_ids)} incident dataset(s)")
+        # Create incident_results list with dataset IDs and empty config
+        incident_results = [(dataset_id, {}) for dataset_id in incident_dataset_ids]
+
+    # Retrieve prompts for each incident dataset using GET API
     if incident_results:
         print("\n" + "="*80)
         print("Retrieving prompts via GET /prompts API")
