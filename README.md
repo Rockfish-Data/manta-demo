@@ -4,9 +4,15 @@ Lightweight Python CLI tool for generating incident-induced datasets and questio
 
 ## What This Does
 
-Given a source dataset already uploaded to your Rockfish account, this tool:
+This tool operates in two modes:
+
+**Mode 1: Generate New Incidents** - Given a source dataset and incident configuration:
 1. Calls the Manta service to generate incident variants (spikes, sustained changes, outages, ramps)
 2. Generates question/answer prompts for each incident dataset to evaluate analytics agents
+
+**Mode 2: Retrieve Existing Incidents** - Given a source dataset:
+1. Retrieves all previously generated incident datasets for that source
+2. Fetches the question/answer prompts for each incident dataset
 
 ## Supported Incident Types
 
@@ -40,22 +46,36 @@ ROCKFISH_PROJECT_ID=your_project_id
 ROCKFISH_ORGANIZATION_ID=your_org_id
 ```
 
-3. Run the incident generator (prints prompts to stdout):
+3. Run the incident generator:
 
+**Generate new incidents** (prints prompts to stdout):
 ```bash
 python incident-generator.py <dataset-id> incidents.yaml
 ```
 
-4. Save prompts to a file (YAML):
-
+**Generate and save prompts to file**:
 ```bash
 python incident-generator.py <dataset-id> incidents.yaml --out prompts.yaml
 ```
 
-**Example with actual dataset:**
-The current conent of `incidents.yaml` works with the dataset used in one of the Rockfish Data tutorials: [youtube_video_analytics.csv](https://docs.rockfish.ai/tutorials/youtube_video_analytics.csv)
+**Retrieve existing incident datasets** (no config file needed):
 ```bash
+python incident-generator.py <dataset-id>
+```
+
+**Retrieve and save to file**:
+```bash
+python incident-generator.py <dataset-id> --out prompts.yaml
+```
+
+**Example with actual dataset:**
+The current content of `incidents.yaml` works with the dataset used in one of the Rockfish Data tutorials: [youtube_video_analytics.csv](https://docs.rockfish.ai/tutorials/youtube_video_analytics.csv)
+```bash
+# Generate new incidents
 python incident-generator.py 5itvKrpZ68vi0L0VKjfGDM incidents.yaml -o prompts.yaml
+
+# Retrieve existing incidents
+python incident-generator.py 5itvKrpZ68vi0L0VKjfGDM -o prompts.yaml
 ```
 
 ## Key Files
