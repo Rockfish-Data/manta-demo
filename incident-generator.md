@@ -12,8 +12,6 @@ The `incident-generator.py` script is a compact CLI wrapper (~175 lines) that:
 - Requests question/answer prompts for each generated incident dataset
 - Outputs prompts to stdout and optionally appends to a YAML file
 
-This tool complements the more verbose `data_generator.py` prototype which includes plotting and data exploration features.
-
 ## Command-Line Usage
 
 ```bash
@@ -50,6 +48,8 @@ The [incidents.yaml](incidents.yaml) file in this repository demonstrates all fo
 
 - **`type`**: One of four Manta API endpoints (see below)
 - **`configuration`**: Object with incident-specific parameters
+
+The current content is tuned for the dataset used in one of the Rockfish Data tutorials: [youtube_video_analytics.csv](https://docs.rockfish.ai/tutorials/youtube_video_analytics.csv).  This means that you can upload this dataset to your Rockfish Data account and use it to generate incident data out of the box.
 
 ### Supported Incident Types
 

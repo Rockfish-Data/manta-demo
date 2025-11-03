@@ -53,6 +53,7 @@ python incident-generator.py <dataset-id> incidents.yaml --out prompts.yaml
 ```
 
 **Example with actual dataset:**
+The current conent of `incidents.yaml` works with the dataset used in one of the Rockfish Data tutorials: [youtube_video_analytics.csv](https://docs.rockfish.ai/tutorials/youtube_video_analytics.csv)
 ```bash
 python incident-generator.py 5itvKrpZ68vi0L0VKjfGDM incidents.yaml -o prompts.yaml
 ```
