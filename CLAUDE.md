@@ -11,26 +11,39 @@ This is a lightweight Python CLI tool for generating incident-induced datasets a
 
 ## Core Architecture
 
-**Single-file CLI application**: [incident-generator.py](incident-generator.py) (~175 lines)
+**Single-file CLI application**: [incident-generator.py](incident-generator.py) (~320 lines)
+- Operates in two modes: generate new incidents OR retrieve existing incident datasets
 - Handles all API interactions with Rockfish and Manta services
-- Loads incident configurations from YAML
+- Loads incident configurations from YAML (Mode 1 only)
 - Outputs generated prompts to stdout and optionally appends to a file
-- Uses custom YAML dumper to format multiline strings (SQL queries, etc.) as block scalars (|) for readability
+- Uses custom YAML dumper (`_BlockStrDumper`) to format multiline strings (SQL queries, etc.) as block scalars (|) for readability
 
 **Incident configuration**: [incidents.yaml](incidents.yaml)
-- YAML file defining incidents to generate
-- Each entry has a `type` (one of four incident endpoints) and `configuration` object
+- YAML file defining incidents to generate (required only for Mode 1)
+- Top-level is a list, each entry has a `type` (one of four incident endpoints) and `configuration` object
 - Configuration parameters vary by incident type but commonly include:
   - `impacted_measurement`: which metric to affect (e.g., "views", "likes", "comments")
-  - `impacted_metadata_predicate`: list of column_name/value pairs to filter which rows are affected
+  - `impacted_metadata_predicate`: list of objects with `column_name` and `value` fields to filter which rows are affected
   - `timestamp_column`: name of the timestamp column in the dataset
-  - Magnitude and timing parameters specific to each incident type
+  - Magnitude and timing parameters specific to each incident type (see incidents.yaml for examples)
 
-**API Integration Pattern**:
-- All API calls require three custom headers: `X-API-Key`, `X-Project-ID`, `X-Organization-ID`
+**Dual-Mode Operation**:
+
+*Mode 1 - Generate New Incidents*:
+- Invoked when config file is provided: `python incident-generator.py <dataset-id> incidents.yaml`
 - Two-step process per incident:
   1. POST to `{MANTA_API_URL}/{incident-type}` with dataset_id and incident_config → returns new incident dataset_id
-  2. POST to `{MANTA_API_URL}/prompts` with incident dataset_id → returns generated Q&A prompts
+  2. POST to `{MANTA_API_URL}/prompts` with incident dataset_id → generates Q&A prompts
+  3. GET from `{MANTA_API_URL}/prompts?dataset_id={incident_dataset_id}` → retrieves generated prompts
+
+*Mode 2 - Retrieve Existing Incidents*:
+- Invoked when NO config file provided: `python incident-generator.py <dataset-id>`
+- Two-step process:
+  1. POST to `{MANTA_API_URL}/incident-dataset-ids` with dataset_id → returns list of incident dataset IDs
+  2. GET from `{MANTA_API_URL}/prompts?dataset_id={incident_dataset_id}` for each → retrieves prompts
+
+**API Authentication**:
+- All API calls require three custom headers: `X-API-Key` (with "Bearer " prefix), `X-Project-ID`, `X-Organization-ID`
 
 ## Environment Setup
 
@@ -52,19 +65,38 @@ pip install -r requirements.txt
 
 ## Common Commands
 
-**Run incident generator** (prints to stdout):
+**Generate new incidents** (prints to stdout):
 ```bash
 python incident-generator.py <dataset-id> incidents.yaml
 ```
 
-**Run and save prompts to file**:
+**Generate and save prompts to file**:
 ```bash
 python incident-generator.py <dataset-id> incidents.yaml --out prompts.yaml
 ```
 
-**Example with actual dataset**:
+**Retrieve existing incident datasets** (no config file needed):
 ```bash
+python incident-generator.py <dataset-id>
+```
+
+**Retrieve and save to file**:
+```bash
+python incident-generator.py <dataset-id> --out prompts.yaml
+```
+
+**Example with actual dataset** (youtube_video_analytics.csv from Rockfish tutorials):
+```bash
+# Generate new incidents
 python incident-generator.py 5itvKrpZ68vi0L0VKjfGDM incidents.yaml -o prompts.yaml
+
+# Retrieve existing incidents
+python incident-generator.py 5itvKrpZ68vi0L0VKjfGDM -o prompts.yaml
+```
+
+**Run tests** (if available):
+```bash
+pytest
 ```
 
 ## Supported Incident Types
@@ -79,16 +111,26 @@ Each type requires specific configuration fields. See [incidents.yaml](incidents
 
 ## Key Implementation Details
 
-**Custom YAML Formatting**: The `_BlockStrDumper` class extends `yaml.SafeDumper` to represent multiline strings with block scalar style (|) instead of escaped newlines. This makes SQL queries and long text in prompts readable in output files.
+**Custom YAML Formatting**: The `_BlockStrDumper` class (incident-generator.py:16-26) extends `yaml.SafeDumper` to represent multiline strings with block scalar style (|) instead of escaped newlines. This makes SQL queries and long text in prompts readable in output files.
 
 **Error Handling**: API calls use try/except with `requests.exceptions.RequestException` and print response text on failure. Missing environment variables or config files cause immediate exit with descriptive messages.
 
-**Output Format**: When `--out` is specified, prompts are appended to the file with a header comment `# Incident dataset: {incident_dataset_id}` followed by the YAML-formatted prompts.
+**Output Format**: When `--out` is specified, prompts are appended to the file with:
+- Header comment: `# Incident dataset: {incident_dataset_id}`
+- Incident configuration as comments (Mode 1 only)
+- YAML-formatted prompts
+
+**Key Functions**:
+- `generate_prompts()` - Mode 1: Creates new incident datasets and generates prompts
+- `retrieve_incident_dataset_ids()` - Mode 2: Fetches existing incident dataset IDs
+- `retrieve_prompts()` - Both modes: GET request to fetch prompts for a dataset
+- `format_output()` - Formats output with dataset ID, config, and prompts
 
 ## Data Files
 
-- `youtube_video_analytics.csv` - Example source dataset (1.9 MB, ~20K rows)
+- Example dataset: [youtube_video_analytics.csv](https://docs.rockfish.ai/tutorials/youtube_video_analytics.csv) from Rockfish tutorials
 - Datasets must be pre-uploaded to Rockfish before running the incident generator
+- `prompts.yaml` - Output file containing generated prompts (when using `--out` flag)
 
 ## Additional Documentation
 
