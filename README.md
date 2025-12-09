@@ -36,11 +36,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-2. Create a `.env` file (or copy from `.env.example` if available) with your credentials:
+2. Create a `.env` file with your credentials:
 
 ```bash
-ROCKFISH_API_URL=https://sunset-beach.rockfish.ai
-MANTA_API_URL=https://manta.sunset-beach.rockfish.ai
+ROCKFISH_API_URL=https://otter-shores.rockfish.ai
+MANTA_API_URL=https://manta.otter-shores.rockfish.ai
 ROCKFISH_API_KEY=sk_your_api_key_here
 ROCKFISH_PROJECT_ID=your_project_id
 ROCKFISH_ORGANIZATION_ID=your_org_id
