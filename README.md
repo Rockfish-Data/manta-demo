@@ -76,12 +76,12 @@ This creates:
 
 **Retrieve from existing dataset** (requires dataset ID):
 ```bash
-python incident-generator.py --dataset-id 5itvKrpZ68vi0L0VKjfGDM --out prompts.yaml
+python incident-generator.py --dataset-id <your-dataset-id> --out prompts.yaml
 ```
 
 **Retrieve and download incident datasets**:
 ```bash
-python incident-generator.py --dataset-id 5itvKrpZ68vi0L0VKjfGDM --out prompts.yaml --download-incidents ./outputs
+python incident-generator.py --dataset-id <your-dataset-id> --out prompts.yaml --download-incidents ./outputs
 ```
 
 ### Example with Tutorial Dataset
