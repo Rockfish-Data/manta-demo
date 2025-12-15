@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import pandas as pd
+import pyarrow.csv as pa_csv
 import requests
 import yaml
 from dotenv import find_dotenv, load_dotenv
@@ -15,6 +17,9 @@ import rockfish as rf
 from rockfish.dataset import LocalDataset
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+
+# Metadata key for incident config (matches Manta API)
+INCIDENT_CONFIG_METADATA_KEY = b"incident_config"
 
 
 # Custom YAML dumper that emits block style (|) for multiline strings.
@@ -110,7 +115,7 @@ async def create_dataset_from_csv(csv_path: str, env: Dict[str, str]) -> str:
         await conn.close()
 
 
-async def download_dataset_as_csv(dataset_id: str, output_path: str, env: Dict[str, str]) -> LocalDataset:
+async def download_dataset_as_csv(dataset_id: str, output_path: str, env: Dict[str, str]) -> Tuple[LocalDataset, Optional[Dict]]:
     """Download a Rockfish dataset and save it as a CSV file.
 
     Args:
@@ -119,7 +124,7 @@ async def download_dataset_as_csv(dataset_id: str, output_path: str, env: Dict[s
         env: Dictionary of environment variables
 
     Returns:
-        LocalDataset object for further processing
+        Tuple of (LocalDataset, incident_config dict or None)
     """
     # Create a remote connection using environment variables
     conn = rf.Connection.remote(
@@ -137,11 +142,41 @@ async def download_dataset_as_csv(dataset_id: str, output_path: str, env: Dict[s
         print(f"Downloading dataset {dataset_id}...")
         local_dataset = await remote_dataset.to_local(conn)
 
+        # Extract incident config if present
+        incident_config = None
+        try:
+            # Extract pattern_type from remote dataset labels
+            pattern_type = remote_dataset.metadata.get("labels", {}).get("pattern_type")
+
+            if pattern_type:
+                # Map pattern_type to incident type name
+                pattern_type_map = {
+                    "InstantaneousSpike": "instantaneous-spike-data",
+                    "SustainedMagnitudeChange": "sustained-magnitude-change-data",
+                    "DataOutage": "data-outage-data",
+                    "ValueRamp": "value-ramp-data"
+                }
+                incident_type = pattern_type_map.get(pattern_type)
+
+                if incident_type:
+                    # Extract incident config from schema metadata
+                    schema_metadata = local_dataset.table.schema.metadata
+                    if schema_metadata and INCIDENT_CONFIG_METADATA_KEY in schema_metadata:
+                        config_json = schema_metadata[INCIDENT_CONFIG_METADATA_KEY].decode()
+                        config_data = json.loads(config_json)
+
+                        incident_config = {
+                            "type": incident_type,
+                            "configuration": config_data
+                        }
+        except Exception as e:
+            print(f"Warning: Could not extract incident config: {e}")
+
         # Save as CSV
-        import pyarrow.csv as pa_csv
         pa_csv.write_csv(local_dataset.table, output_path)
         print(f"Saved dataset to: {output_path}")
-        return local_dataset
+
+        return local_dataset, incident_config
     finally:
         await conn.close()
 
@@ -160,8 +195,6 @@ def create_incident_comparison_plot(
         incident_config: Configuration of the incident
         output_path: Path where the plot should be saved
     """
-    import pandas as pd
-
     # Convert to pandas for easier plotting
     original_df = original_dataset.to_pandas()
     incident_df = incident_dataset.to_pandas()
@@ -405,19 +438,22 @@ def format_output(dataset_id: str, incident_config: Dict, prompts: Dict) -> str:
 
     Args:
         dataset_id: The incident dataset ID
-        incident_config: The incident configuration dictionary
+        incident_config: The incident configuration dictionary (can be empty in retrieve mode)
         prompts: The prompts dictionary
 
     Returns:
-        Formatted string with dataset ID, incident config as comments, and prompts
+        Formatted string with dataset ID, incident config as comments (if present), and prompts
     """
     output = f"# Incident dataset: {dataset_id}\n"
-    output += "# Incident configuration:\n"
-    incident_yaml = yaml.dump(incident_config, Dumper=_BlockStrDumper, sort_keys=False, default_flow_style=False)
-    for line in incident_yaml.split('\n'):
-        if line:
-            output += f"# {line}\n"
-    output += "\n"
+
+    if incident_config:
+        output += "# Incident configuration:\n"
+        incident_yaml = yaml.dump(incident_config, Dumper=_BlockStrDumper, sort_keys=False, default_flow_style=False)
+        for line in incident_yaml.split('\n'):
+            if line:
+                output += f"# {line}\n"
+        output += "\n"
+
     prompts_yaml = yaml.dump(prompts, Dumper=_BlockStrDumper, sort_keys=False, default_flow_style=False)
     output += prompts_yaml
     return output
@@ -466,6 +502,20 @@ async def main():
         dataset_id = args.dataset_id
         print(f"Using existing dataset ID: {dataset_id}")
 
+        # Download the original source dataset for plotting if requested
+        if args.download_incidents:
+            print(f"Downloading original source dataset for comparison plots...")
+            try:
+                original_dataset, _ = await download_dataset_as_csv(
+                    dataset_id,
+                    "/tmp/original_dataset.csv",  # Temporary file
+                    env
+                )
+                print(f"Downloaded original dataset with {len(original_dataset.table)} rows")
+            except Exception as e:
+                print(f"Warning: Could not download original dataset: {e}")
+                print("Plots will not be generated without original dataset")
+
     # Set up API headers
     headers = get_headers(
         env["ROCKFISH_API_KEY"],
@@ -502,10 +552,59 @@ async def main():
             return
 
         print(f"Found {len(incident_dataset_ids)} incident dataset(s)")
-        # Create incident_results list with dataset IDs and empty config
-        incident_results = [(incident_dataset_id, {}) for incident_dataset_id in incident_dataset_ids]
+        # Create incident_results as list of lists (mutable)
+        incident_results = [[incident_dataset_id, {}] for incident_dataset_id in incident_dataset_ids]
 
-    # Retrieve prompts for each incident dataset using GET API
+    # Download incident datasets
+    if incident_results and args.download_incidents:
+            print("\n" + "="*80)
+            print("Downloading incident datasets")
+            print("="*80)
+
+            # Create the output directory if it doesn't exist
+            output_dir = Path(args.download_incidents)
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            for i, (incident_dataset_id, incident_config) in enumerate(incident_results):
+                print(f"\nDownloading incident dataset: {incident_dataset_id}")
+                try:
+                    temp_output_path = output_dir / f"temp_{incident_dataset_id}.csv"
+
+                    incident_dataset, extracted_config = await download_dataset_as_csv(
+                        incident_dataset_id,
+                        str(temp_output_path),
+                        env
+                    )
+
+                    if not incident_config and extracted_config:
+                        incident_config = extracted_config
+                        incident_results[i][1] = extracted_config  # Update the list
+                        print(f"Extracted incident config from dataset metadata")
+
+                    incident_type = incident_config.get("type", "unknown") if incident_config else "retrieved"
+                    output_filename = f"incident_{incident_dataset_id}_{incident_type}.csv"
+                    output_path = output_dir / output_filename
+
+                    os.rename(str(temp_output_path), str(output_path))
+
+                    # Create comparison plot if we have the original dataset
+                    if original_dataset and incident_config:
+                        plot_filename = f"incident_{incident_dataset_id}_{incident_type}_comparison.png"
+                        plot_path = output_dir / plot_filename
+                        print(f"Creating comparison plot...")
+                        try:
+                            create_incident_comparison_plot(
+                                original_dataset,
+                                incident_dataset,
+                                incident_config,
+                                str(plot_path)
+                            )
+                        except Exception as plot_error:
+                            print(f"Warning: Could not create plot: {plot_error}")
+                except Exception as e:
+                    print(f"Error downloading dataset {incident_dataset_id}: {e}")
+
+    # Retrieve prompts for each incident dataset
     if incident_results:
         print("\n" + "="*80)
         print("Retrieving prompts")
@@ -537,43 +636,6 @@ async def main():
                         print(f"Error writing prompts to {args.out}: {e}")
                 else:
                     print(formatted_output)
-
-        # Download incident datasets if requested
-        if args.download_incidents:
-            print("\n" + "="*80)
-            print("Downloading incident datasets")
-            print("="*80)
-
-            # Create the output directory if it doesn't exist
-            output_dir = Path(args.download_incidents)
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-            for incident_dataset_id, incident_config in incident_results:
-                # Generate a filename for the incident dataset
-                incident_type = incident_config.get("type", "unknown") if incident_config else "retrieved"
-                output_filename = f"incident_{incident_dataset_id}_{incident_type}.csv"
-                output_path = output_dir / output_filename
-
-                print(f"\nDownloading incident dataset: {incident_dataset_id}")
-                try:
-                    incident_dataset = await download_dataset_as_csv(incident_dataset_id, str(output_path), env)
-
-                    # Create comparison plot if we have the original dataset
-                    if original_dataset and incident_config:
-                        plot_filename = f"incident_{incident_dataset_id}_{incident_type}_comparison.png"
-                        plot_path = output_dir / plot_filename
-                        print(f"Creating comparison plot...")
-                        try:
-                            create_incident_comparison_plot(
-                                original_dataset,
-                                incident_dataset,
-                                incident_config,
-                                str(plot_path)
-                            )
-                        except Exception as plot_error:
-                            print(f"Warning: Could not create plot: {plot_error}")
-                except Exception as e:
-                    print(f"Error downloading dataset {incident_dataset_id}: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())
