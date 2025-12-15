@@ -117,4 +117,3 @@ python incident-generator.py \
 ## Next Steps
 
 - Edit [incidents.yaml](incidents.yaml) to customize incident configurations
-- Check [CLAUDE.md](CLAUDE.md) for architecture and implementation details
