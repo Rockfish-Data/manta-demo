@@ -6,13 +6,16 @@ Lightweight Python CLI tool for generating incident-induced datasets and questio
 
 This tool operates in two modes:
 
-**Mode 1: Generate New Incidents** - Given a source dataset and incident configuration:
-1. Calls the Manta service to generate incident variants (spikes, sustained changes, outages, ramps)
-2. Generates question/answer prompts for each incident dataset to evaluate analytics agents
+**Mode 1: Generate New Incidents** - Given a CSV file and incident configuration:
+1. Uploads the CSV to Rockfish to create a source dataset
+2. Calls the Manta service to generate incident variants (spikes, sustained changes, outages, ramps)
+3. Generates question/answer prompts for each incident dataset to evaluate analytics agents
+4. Optionally downloads incident datasets as CSV files with before/after visualization plots
 
-**Mode 2: Retrieve Existing Incidents** - Given a source dataset:
+**Mode 2: Retrieve Existing Incidents** - Given an existing dataset ID:
 1. Retrieves all previously generated incident datasets for that source
 2. Fetches the question/answer prompts for each incident dataset
+3. Optionally downloads incident datasets as CSV files
 
 ## Supported Incident Types
 
@@ -24,7 +27,7 @@ This tool operates in two modes:
 ## Prerequisites
 
 - Rockfish account with Manta service access
-- Source dataset already uploaded to Rockfish
+- CSV file for generate mode, or existing dataset ID for retrieve mode
 
 ## Quick Start
 
@@ -34,6 +37,7 @@ This tool operates in two modes:
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+pip install -U 'rockfish[labs]' -f 'https://packages.rockfish.ai'
 ```
 
 2. Create a `.env` file with your credentials:
@@ -48,44 +52,69 @@ ROCKFISH_ORGANIZATION_ID=your_org_id
 
 3. Run the incident generator:
 
-**Generate new incidents** (prints prompts to stdout):
+### Mode 1: Generate New Incidents
+
+**Basic usage** (generates incidents, prints prompts to stdout):
 ```bash
-python incident-generator.py <dataset-id> incidents.yaml
+python incident-generator.py --csv data.csv --incident-config incidents.yaml
 ```
 
-**Generate and save prompts to file**:
+**Save prompts to file**:
 ```bash
-python incident-generator.py <dataset-id> incidents.yaml --out prompts.yaml
+python incident-generator.py --csv data.csv --incident-config incidents.yaml --out prompts.yaml
 ```
 
-**Retrieve existing incident datasets** (no config file needed):
+**Download incident datasets and create visualization plots**:
 ```bash
-python incident-generator.py <dataset-id>
+python incident-generator.py --csv data.csv --incident-config incidents.yaml --out prompts.yaml --download-incidents ./outputs
+```
+This creates:
+- `./outputs/incident_<id>_<type>.csv` - Incident dataset CSV files
+- `./outputs/incident_<id>_<type>_comparison.png` - Before/after comparison plots
+
+### Mode 2: Retrieve Existing Incidents
+
+**Retrieve from existing dataset** (requires dataset ID):
+```bash
+python incident-generator.py --dataset-id 5itvKrpZ68vi0L0VKjfGDM --out prompts.yaml
 ```
 
-**Retrieve and save to file**:
+**Retrieve and download incident datasets**:
 ```bash
-python incident-generator.py <dataset-id> --out prompts.yaml
+python incident-generator.py --dataset-id 5itvKrpZ68vi0L0VKjfGDM --out prompts.yaml --download-incidents ./outputs
 ```
 
-**Example with actual dataset:**
-The current content of `incidents.yaml` works with the dataset used in one of the Rockfish Data tutorials: [youtube_video_analytics.csv](https://docs.rockfish.ai/tutorials/youtube_video_analytics.csv)
-```bash
-# Generate new incidents
-python incident-generator.py 5itvKrpZ68vi0L0VKjfGDM incidents.yaml -o prompts.yaml
+### Example with Tutorial Dataset
 
-# Retrieve existing incidents
-python incident-generator.py 5itvKrpZ68vi0L0VKjfGDM -o prompts.yaml
+The current content of `incidents.yaml` works with the dataset from the Rockfish Data tutorials: [youtube_video_analytics.csv](https://docs.rockfish.ai/tutorials/youtube_video_analytics.csv)
+
+```bash
+# Download the sample CSV
+curl -O https://docs.rockfish.ai/tutorials/youtube_video_analytics.csv
+
+# Generate new incidents with visualizations
+python incident-generator.py \
+  --csv youtube_video_analytics.csv \
+  --incident-config incidents.yaml \
+  --out prompts.yaml \
+  --download-incidents ./outputs
+
+# Later, retrieve existing incidents for that dataset
+python incident-generator.py \
+  --dataset-id <your-dataset-id> \
+  --out prompts.yaml
 ```
 
 ## Key Files
 
-- [incident-generator.py](incident-generator.py) - Main CLI script (~320 lines)
+- [incident-generator.py](incident-generator.py) - Main CLI script (~540 lines)
+  - CSV upload and dataset creation
+  - Incident generation and prompt retrieval
+  - Dataset download functionality
+  - Automatic before/after visualization plots
 - [incidents.yaml](incidents.yaml) - Example incident configurations (one of each type)
-- [incident-generator.md](incident-generator.md) - Detailed documentation, advanced usage, and troubleshooting
 
 ## Next Steps
 
 - Edit [incidents.yaml](incidents.yaml) to customize incident configurations
-- See [incident-generator.md](incident-generator.md) for detailed usage, parameter explanations, and troubleshooting
 - Check [CLAUDE.md](CLAUDE.md) for architecture and implementation details
