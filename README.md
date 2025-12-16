@@ -15,7 +15,7 @@ This tool operates in two modes:
 **Mode 2: Retrieve Existing Incidents** - Given an existing dataset ID:
 1. Retrieves all previously generated incident datasets for that source
 2. Fetches the question/answer prompts for each incident dataset
-3. Optionally downloads incident datasets as CSV files
+3. Optionally downloads incident datasets as CSV files with before/after visualization plots
 
 ## Supported Incident Types
 
