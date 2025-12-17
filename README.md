@@ -43,8 +43,8 @@ pip install -U 'rockfish[labs]' -f 'https://packages.rockfish.ai'
 2. Create a `.env` file with your credentials:
 
 ```bash
-ROCKFISH_API_URL=https://otter-shores.rockfish.ai
-MANTA_API_URL=https://manta.otter-shores.rockfish.ai
+ROCKFISH_API_URL=https://api.rockfish.ai
+MANTA_API_URL=https://manta.rockfish.ai
 ROCKFISH_API_KEY=your_api_key_here
 ROCKFISH_PROJECT_ID=your_project_id
 ROCKFISH_ORGANIZATION_ID=your_org_id
