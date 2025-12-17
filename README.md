@@ -45,7 +45,7 @@ pip install -U 'rockfish[labs]' -f 'https://packages.rockfish.ai'
 ```bash
 ROCKFISH_API_URL=https://otter-shores.rockfish.ai
 MANTA_API_URL=https://manta.otter-shores.rockfish.ai
-ROCKFISH_API_KEY=sk_your_api_key_here
+ROCKFISH_API_KEY=your_api_key_here
 ROCKFISH_PROJECT_ID=your_project_id
 ROCKFISH_ORGANIZATION_ID=your_org_id
 ```
