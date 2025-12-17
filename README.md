@@ -35,7 +35,7 @@ This tool operates in two modes:
 
 ```bash
 python -m venv <your_env_name>
-source .venv/bin/activate
+source <your_env_name>/bin/activate
 pip install -r requirements.txt
 pip install -U 'rockfish[labs]' -f 'https://packages.rockfish.ai'
 ```
