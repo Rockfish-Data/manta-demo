@@ -107,7 +107,7 @@ python incident-generator.py \
 
 ## Key Files
 
-- [incident-generator.py](incident-generator.py) - Main CLI script (~540 lines)
+- [incident-generator.py](incident-generator.py) - Main CLI script
   - CSV upload and dataset creation
   - Incident generation and prompt retrieval
   - Dataset download functionality
