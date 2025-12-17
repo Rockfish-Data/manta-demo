@@ -34,7 +34,7 @@ This tool operates in two modes:
 1. Create a Python virtualenv and install dependencies:
 
 ```bash
-python -m venv .venv
+python -m venv <your_env_name>
 source .venv/bin/activate
 pip install -r requirements.txt
 pip install -U 'rockfish[labs]' -f 'https://packages.rockfish.ai'
